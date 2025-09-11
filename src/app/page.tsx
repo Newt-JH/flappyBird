@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import React, { useEffect, useRef } from 'react';
@@ -12,6 +13,7 @@ export default function Home() {
   const gameRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // 1) 현재 DOM 참조 가져오기
     const canvas = canvasRef.current;
     const scoreEl = scoreRef.current;
     const bestEl = bestRef.current;
@@ -20,15 +22,24 @@ export default function Home() {
     const restartBtn = restartBtnRef.current;
     const gameEl = gameRef.current;
 
+    // 2) 없으면 조용히 종료 (마운트 순서 보호)
     if (!canvas || !scoreEl || !bestEl || !guideEl || !pauseBtn || !restartBtn || !gameEl) {
       return;
     }
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      return;
-    }
+    // 3) 비널 별칭으로 고정 (이후 함수/클로저에서도 TS가 null 경고 안 함)
+    const canvasEl = canvas as HTMLCanvasElement;
+    const scoreEl_ = scoreEl as HTMLSpanElement;
+    const bestEl_ = bestEl as HTMLSpanElement;
+    const guideEl_ = guideEl as HTMLDivElement;
+    const pauseBtn_ = pauseBtn as HTMLButtonElement;
+    const restartBtn_ = restartBtn as HTMLButtonElement;
+    const gameEl_ = gameEl as HTMLDivElement;
 
+    // 4) Canvas 2D 컨텍스트 (비널 단언)
+    const ctx = canvasEl.getContext('2d') as CanvasRenderingContext2D;
+
+    // ===== 게임 상태 =====
     const G = {
       playing: false,
       paused: false,
@@ -47,15 +58,18 @@ export default function Home() {
       speed: 140,
     };
 
+    // 새
     const bird = {
       x: 80, y: 240, r: 14,
       vy: 0,
       angle: 0
     };
 
+    // 파이프
     let pipes: any[] = [];
     let lastPipeX = 0;
 
+    // ===== 유틸 =====
     function rand(min: number, max: number) { return Math.random() * (max - min) + min; }
 
     function resetGame() {
@@ -70,17 +84,17 @@ export default function Home() {
       bird.y = G.H / 2;
       bird.vy = 0;
       bird.angle = 0;
-      scoreEl.textContent = '0';
-      bestEl.textContent = String(G.best);
-      guideEl.style.display = 'block';
-      guideEl.innerHTML = '⬆️ 탭/클릭/스페이스/↑ 로 점프<br/>장애물을 통과해보세요!';
+      scoreEl_.textContent = '0';
+      bestEl_.textContent = String(G.best);
+      guideEl_.style.display = 'block';
+      guideEl_.innerHTML = '⬆️ 탭/클릭/스페이스/↑ 로 점프<br/>장애물을 통과해보세요!';
     }
 
     function startGame() {
       if (G.over) resetGame();
       if (!G.playing) {
         G.playing = true;
-        guideEl.style.display = 'none';
+        guideEl_.style.display = 'none';
       }
       flap();
     }
@@ -89,21 +103,21 @@ export default function Home() {
       G.playing = false;
       G.over = true;
       G.paused = false;
-      guideEl.style.display = 'block';
-      guideEl.textContent = `게임 오버! 점수 ${G.score}  —  다시 시작하려면 탭/클릭/스페이스`;
+      guideEl_.style.display = 'block';
+      guideEl_.textContent = `게임 오버! 점수 ${G.score}  —  다시 시작하려면 탭/클릭/스페이스`;
       if (G.score > G.best) {
         G.best = G.score;
         localStorage.setItem('flappy.best', String(G.best));
       }
-      bestEl.textContent = String(G.best);
+      bestEl_.textContent = String(G.best);
     }
 
     function togglePause() {
       if (!G.playing || G.over) return;
       G.paused = !G.paused;
-      pauseBtn.textContent = G.paused ? '재개' : '일시정지';
-      guideEl.style.display = G.paused ? 'block' : 'none';
-      if (G.paused) guideEl.textContent = '일시정지 — 재개하려면 버튼/탭/스페이스';
+      pauseBtn_.textContent = G.paused ? '재개' : '일시정지';
+      guideEl_.style.display = G.paused ? 'block' : 'none';
+      if (G.paused) guideEl_.textContent = '일시정지 — 재개하려면 버튼/탭/스페이스';
     }
 
     function flap() {
@@ -111,6 +125,7 @@ export default function Home() {
       bird.vy = -G.flap;
     }
 
+    // ===== 입력 핸들러 =====
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['Space', 'ArrowUp'].includes(e.code)) e.preventDefault();
     };
@@ -126,18 +141,19 @@ export default function Home() {
       else if (G.paused) togglePause();
       else flap();
     };
-    
+
     const handlePointerDown = (e: PointerEvent) => {
-        e.preventDefault();
-        onPress();
-    }
+      e.preventDefault();
+      onPress();
+    };
 
     window.addEventListener('keydown', handleKeyDown, { passive: false });
     window.addEventListener('keyup', handleKeyUp);
-    gameEl.addEventListener('pointerdown', handlePointerDown, { passive: false });
-    pauseBtn.addEventListener('click', togglePause);
-    restartBtn.addEventListener('click', resetGame);
+    gameEl_.addEventListener('pointerdown', handlePointerDown, { passive: false });
+    pauseBtn_.addEventListener('click', togglePause);
+    restartBtn_.addEventListener('click', resetGame);
 
+    // ===== 파이프 로직 =====
     function spawnPipePair(startX: number) {
       const safeTop = 60;
       const safeBottom = G.H - G.groundH - 60;
@@ -170,12 +186,13 @@ export default function Home() {
         if (!p.top.passed && p.x + p.w < bird.x - bird.r) {
           p.top.passed = true;
           G.score += 1;
-          scoreEl.textContent = String(G.score);
+          scoreEl_.textContent = String(G.score);
         }
       }
       pipes = pipes.filter(p => p.x + p.w > -40);
     }
 
+    // ===== 충돌 =====
     function circleRectCollide(cx: number, cy: number, cr: number, rx: number, ry: number, rw: number, rh: number) {
       const nearestX = Math.max(rx, Math.min(cx, rx + rw));
       const nearestY = Math.max(ry, Math.min(cy, ry + rh));
@@ -195,7 +212,8 @@ export default function Home() {
       return false;
     }
 
-    function drawBackground(dt: number, t: number) {
+    // ===== 렌더 =====
+    function drawBackground(_dt: number, t: number) {
       ctx.save();
       const hillY = G.H - G.groundH - 80;
       const offset = (t * (G.speed * .2)) % (G.W + 120);
@@ -266,6 +284,7 @@ export default function Home() {
       ctx.clearRect(0, 0, G.W, G.H);
     }
 
+    // ===== 메인 루프 =====
     let prevTs = performance.now();
     function frame(now: number) {
       requestAnimationFrame(frame);
@@ -294,41 +313,44 @@ export default function Home() {
       drawBird();
       drawGround(G.time);
     }
-    
-    function setupDPR() {
-        const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
-        const cssW = window.innerWidth;
-        const cssH = window.innerHeight;
-        canvas.width = Math.round(cssW * dpr);
-        canvas.height = Math.round(cssH * dpr);
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-        G.W = cssW;
-        G.H = cssH;
+    // ===== DPR/리사이즈 =====
+    function setupDPR() {
+      const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
+      const cssW = window.innerWidth;
+      const cssH = window.innerHeight;
+      canvasEl.width = Math.round(cssW * dpr);
+      canvasEl.height = Math.round(cssH * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      G.W = cssW;
+      G.H = cssH;
     }
     window.addEventListener('resize', setupDPR);
-    
+
+    // ===== 페이지 숨김 처리 =====
     const handleVisibilityChange = () => {
-        if (document.hidden && G.playing && !G.over) {
-          G.paused = true;
-          pauseBtn.textContent = '재개';
-          guideEl.style.display = 'block';
-          guideEl.textContent = '일시정지 — 재개하려면 버튼/탭/스페이스';
-        }
-    }
-    
+      if (document.hidden && G.playing && !G.over) {
+        G.paused = true;
+        pauseBtn_.textContent = '재개';
+        guideEl_.style.display = 'block';
+        guideEl_.textContent = '일시정지 — 재개하려면 버튼/탭/스페이스';
+      }
+    };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
+    // 초기화 & 루프 시작
     setupDPR();
     resetGame();
     requestAnimationFrame((t) => { prevTs = t; requestAnimationFrame(frame); });
 
+    // 클린업
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
-      gameEl.removeEventListener('pointerdown', handlePointerDown);
-      pauseBtn.removeEventListener('click', togglePause);
-      restartBtn.removeEventListener('click', resetGame);
+      gameEl_.removeEventListener('pointerdown', handlePointerDown);
+      pauseBtn_.removeEventListener('click', togglePause);
+      restartBtn_.removeEventListener('click', resetGame);
       window.removeEventListener('resize', setupDPR);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
