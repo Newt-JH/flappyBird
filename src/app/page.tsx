@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import React, { useEffect, useRef } from 'react';
@@ -13,7 +12,16 @@ export default function Home() {
   const gameRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // 1) 현재 DOM 참조 가져오기
+    // ===== 타입 정의 =====
+    type PipeSegment = { y: number; h: number };
+    type Pipe = {
+      x: number;
+      w: number;
+      top: PipeSegment & { passed: boolean };
+      bottom: PipeSegment;
+    };
+
+    // 1) DOM 참조
     const canvas = canvasRef.current;
     const scoreEl = scoreRef.current;
     const bestEl = bestRef.current;
@@ -22,12 +30,9 @@ export default function Home() {
     const restartBtn = restartBtnRef.current;
     const gameEl = gameRef.current;
 
-    // 2) 없으면 조용히 종료 (마운트 순서 보호)
-    if (!canvas || !scoreEl || !bestEl || !guideEl || !pauseBtn || !restartBtn || !gameEl) {
-      return;
-    }
+    if (!canvas || !scoreEl || !bestEl || !guideEl || !pauseBtn || !restartBtn || !gameEl) return;
 
-    // 3) 비널 별칭으로 고정 (이후 함수/클로저에서도 TS가 null 경고 안 함)
+    // 비널 별칭
     const canvasEl = canvas as HTMLCanvasElement;
     const scoreEl_ = scoreEl as HTMLSpanElement;
     const bestEl_ = bestEl as HTMLSpanElement;
@@ -36,7 +41,6 @@ export default function Home() {
     const restartBtn_ = restartBtn as HTMLButtonElement;
     const gameEl_ = gameEl as HTMLDivElement;
 
-    // 4) Canvas 2D 컨텍스트 (비널 단언)
     const ctx = canvasEl.getContext('2d') as CanvasRenderingContext2D;
 
     // ===== 게임 상태 =====
@@ -55,7 +59,11 @@ export default function Home() {
       pipeW: 64,
       pipeSpacing: 180,
       groundH: 56,
-      speed: 140,
+      // 속도(가속 적용)
+      speedBase: 140,
+      speedCur: 140,
+      speedMax: 300,
+      speedAccel: 12, // px/s^2
     };
 
     // 새
@@ -66,8 +74,7 @@ export default function Home() {
     };
 
     // 파이프
-    let pipes: any[] = [];
-    let lastPipeX = 0;
+    let pipes: Pipe[] = [];
 
     // ===== 유틸 =====
     function rand(min: number, max: number) { return Math.random() * (max - min) + min; }
@@ -78,8 +85,8 @@ export default function Home() {
       G.over = false;
       G.time = 0;
       G.score = 0;
+      G.speedCur = G.speedBase;
       pipes = [];
-      lastPipeX = 0;
       bird.x = 80;
       bird.y = G.H / 2;
       bird.vy = 0;
@@ -96,6 +103,7 @@ export default function Home() {
         G.playing = true;
         guideEl_.style.display = 'none';
       }
+      // 시작 직후 플랩은 점수에 포함 X (공정성)
       flap();
     }
 
@@ -125,6 +133,14 @@ export default function Home() {
       bird.vy = -G.flap;
     }
 
+    function addScoreByFlap() {
+      // 플레이 중 & 일시정지 아님일 때만 +1
+      if (G.playing && !G.paused && !G.over) {
+        G.score += 1;
+        scoreEl_.textContent = String(G.score);
+      }
+    }
+
     // ===== 입력 핸들러 =====
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['Space', 'ArrowUp'].includes(e.code)) e.preventDefault();
@@ -132,19 +148,17 @@ export default function Home() {
 
     const handleKeyUp = (e: KeyboardEvent) => {
       if (['Space', 'ArrowUp'].includes(e.code)) {
-        if (!G.playing) startGame(); else if (G.paused) togglePause(); else flap();
+        if (!G.playing) startGame();
+        else if (G.paused) togglePause();
+        else { flap(); addScoreByFlap(); }
       }
-    };
-
-    const onPress = () => {
-      if (!G.playing) startGame();
-      else if (G.paused) togglePause();
-      else flap();
     };
 
     const handlePointerDown = (e: PointerEvent) => {
       e.preventDefault();
-      onPress();
+      if (!G.playing) startGame();
+      else if (G.paused) togglePause();
+      else { flap(); addScoreByFlap(); }
     };
 
     window.addEventListener('keydown', handleKeyDown, { passive: false });
@@ -173,7 +187,6 @@ export default function Home() {
     function updatePipes(dt: number) {
       if (pipes.length === 0) {
         spawnPipePair(G.W + 80);
-        lastPipeX = G.W + 80;
       } else {
         const last = pipes[pipes.length - 1];
         if (last.x < G.W - G.pipeSpacing) {
@@ -182,12 +195,8 @@ export default function Home() {
       }
 
       for (const p of pipes) {
-        p.x -= G.speed * dt;
-        if (!p.top.passed && p.x + p.w < bird.x - bird.r) {
-          p.top.passed = true;
-          G.score += 1;
-          scoreEl_.textContent = String(G.score);
-        }
+        p.x -= G.speedCur * dt;
+        // 점수는 통과가 아니라 "탭"에서 처리하므로 여기서는 증가시키지 않음
       }
       pipes = pipes.filter(p => p.x + p.w > -40);
     }
@@ -202,9 +211,7 @@ export default function Home() {
     }
 
     function checkCollision() {
-      if (bird.y + bird.r >= G.H - G.groundH || bird.y - bird.r <= 0) {
-        return true;
-      }
+      if (bird.y + bird.r >= G.H - G.groundH || bird.y - bird.r <= 0) return true;
       for (const p of pipes) {
         if (circleRectCollide(bird.x, bird.y, bird.r, p.x, p.top.y, p.w, p.top.h)) return true;
         if (circleRectCollide(bird.x, bird.y, bird.r, p.x, p.bottom.y, p.w, p.bottom.h)) return true;
@@ -216,7 +223,7 @@ export default function Home() {
     function drawBackground(_dt: number, t: number) {
       ctx.save();
       const hillY = G.H - G.groundH - 80;
-      const offset = (t * (G.speed * .2)) % (G.W + 120);
+      const offset = (t * (G.speedCur * .2)) % (G.W + 120);
 
       for (let i = -1; i < 4; i++) {
         const x = i * 160 - offset;
@@ -273,7 +280,7 @@ export default function Home() {
       ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ground').trim() || '#8b5a2b';
       ctx.fillRect(0, groundY, G.W, G.groundH);
       const stripeW = 24;
-      const offset = (t * G.speed) % stripeW;
+      const offset = (t * G.speedCur) % stripeW;
       ctx.fillStyle = 'rgba(0,0,0,.15)';
       for (let x = -stripeW; x < G.W + stripeW; x += stripeW) {
         ctx.fillRect(Math.floor(x - offset), groundY, stripeW / 2, G.groundH);
@@ -293,6 +300,11 @@ export default function Home() {
       const dt = Math.min(dtRaw, 0.033);
 
       if (G.paused) return;
+
+      // 속도 가속
+      if (G.playing && !G.over) {
+        G.speedCur = Math.min(G.speedMax, G.speedCur + G.speedAccel * dt);
+      }
 
       G.time += dt;
       clearCanvas();
@@ -366,7 +378,7 @@ export default function Home() {
               <span>점수:</span><span id="score" ref={scoreRef}>0</span>
               <span style={{ opacity: 0.6, marginLeft: '8px' }}>최고:</span><span id="best" ref={bestRef}>0</span>
             </div>
-            <div style={{ display: 'flex', gap: '6px' }}>
+            <div className="buttons">
               <button className="btn" id="btn-pause" ref={pauseBtnRef}>일시정지</button>
               <button className="btn" id="btn-restart" ref={restartBtnRef}>다시시작</button>
             </div>
@@ -376,11 +388,80 @@ export default function Home() {
             장애물을 통과해보세요!
           </div>
           <div className="bottom-tip">
-            모바일: 화면 탭 · 데스크탑: 클릭/스페이스/↑ |
-            장애물이나 바닥에 닿으면 게임 오버
+            모바일: 화면 탭 · 데스크탑: 클릭/스페이스/↑ | 장애물이나 바닥에 닿으면 게임 오버
           </div>
         </div>
       </div>
+
+      {/* HUD가 모바일에서도 확실히 보이도록 글로벌 스타일 추가 */}
+      <style jsx global>{`
+        html, body { margin: 0; height: 100%; background: #0ea5e9; }
+        .wrap { height: 100vh; width: 100vw; }
+        .game {
+          position: fixed;
+          inset: 0;
+          background: linear-gradient(#7dd3fc, #38bdf8);
+          overflow: hidden;
+        }
+        canvas { width: 100%; height: 100%; display: block; }
+
+        .hud {
+          position: absolute;
+          inset: env(safe-area-inset-top, 0) 8px env(safe-area-inset-bottom, 0) 8px;
+          display: grid;
+          grid-template-rows: auto 1fr auto;
+          z-index: 10;
+          color: #fff;
+          pointer-events: none; /* 게임 입력은 캔버스가 받도록 */
+        }
+        .topbar {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 8px;
+        }
+        .score {
+          display: inline-flex;
+          gap: 8px;
+          align-items: center;
+          pointer-events: auto;
+          background: rgba(0,0,0,.45);
+          border: 1px solid rgba(255,255,255,.25);
+          border-radius: 12px;
+          padding: 6px 10px;
+          font-weight: 800;
+          font-size: clamp(16px, 3.8vw, 22px); /* 모바일에서 크게 보이도록 */
+          text-shadow: 0 1px 2px rgba(0,0,0,.6);
+        }
+        .buttons {
+          display: flex; gap: 6px; pointer-events: auto;
+        }
+        .btn {
+          background: rgba(0,0,0,.45);
+          border: 1px solid rgba(255,255,255,.25);
+          color: #fff;
+          padding: 6px 10px;
+          border-radius: 10px;
+          font-weight: 700;
+        }
+        .center-guide {
+          align-self: center;
+          justify-self: center;
+          text-align: center;
+          background: rgba(0,0,0,.45);
+          padding: 12px 14px;
+          border-radius: 12px;
+          border: 1px solid rgba(255,255,255,.25);
+          font-size: clamp(14px, 3.5vw, 18px);
+          text-shadow: 0 1px 2px rgba(0,0,0,.5);
+        }
+        .bottom-tip {
+          text-align: center;
+          font-size: clamp(11px, 3vw, 13px);
+          opacity: .9;
+          text-shadow: 0 1px 2px rgba(0,0,0,.5);
+        }
+      `}</style>
     </div>
   );
 }
