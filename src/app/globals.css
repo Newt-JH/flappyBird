@@ -1,26 +1,67 @@
-@import "tailwindcss";
-
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: linear-gradient(#7dd3fc, #38bdf8);
+  --ground: #8b5a2b;
+  --pipe: #16a34a;
+  --pipe-dark: #0f7a35;
+  --bird: #fbbf24;
+  --ui: rgba(0,0,0,.6);
+  --white: #fff;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  height: 100%;
+  width: 100%;
+  background: #0ea5e9;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+.wrap {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.game {
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg);
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+canvas { width: 100%; height: 100%; display: block; }
+.hud {
+  position: absolute; inset: 0; pointer-events: none; color: var(--white);
+  display: grid; grid-template-rows: auto 1fr auto; padding: 10px;
+}
+.topbar {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 8px; pointer-events: auto;
+}
+.btn {
+  background: var(--ui); border: 1px solid rgba(255,255,255,.25);
+  color: var(--white); padding: 6px 10px; border-radius: 10px;
+  font-weight: 600; letter-spacing: .2px; cursor: pointer; user-select: none;
+  transition: transform .05s ease;
+}
+.btn:active { transform: translateY(1px); }
+.score {
+  display: inline-flex; gap: 8px; align-items: center;
+  background: var(--ui); padding: 6px 10px; border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.25);
+  font-weight: 700;
+}
+.center-guide {
+  align-self: center; justify-self: center; text-align: center; line-height: 1.4;
+  background: rgba(0,0,0,.45); padding: 12px 14px; border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.25);
+  pointer-events: none;
+}
+.bottom-tip {
+  align-self: end; text-align: center; opacity: .9; font-size: 12px;
+  text-shadow: 0 1px 2px rgba(0,0,0,.35);
 }

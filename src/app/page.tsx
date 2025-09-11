@@ -1,103 +1,364 @@
-import Image from "next/image";
+"use client";
+
+import React, { useEffect, useRef } from 'react';
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const scoreRef = useRef<HTMLSpanElement>(null);
+  const bestRef = useRef<HTMLSpanElement>(null);
+  const guideRef = useRef<HTMLDivElement>(null);
+  const pauseBtnRef = useRef<HTMLButtonElement>(null);
+  const restartBtnRef = useRef<HTMLButtonElement>(null);
+  const gameRef = useRef<HTMLDivElement>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const scoreEl = scoreRef.current;
+    const bestEl = bestRef.current;
+    const guideEl = guideRef.current;
+    const pauseBtn = pauseBtnRef.current;
+    const restartBtn = restartBtnRef.current;
+    const gameEl = gameRef.current;
+
+    if (!canvas || !scoreEl || !bestEl || !guideEl || !pauseBtn || !restartBtn || !gameEl) {
+      return;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      return;
+    }
+
+    const G = {
+      playing: false,
+      paused: false,
+      over: false,
+      time: 0,
+      score: 0,
+      best: parseInt(localStorage.getItem('flappy.best') || '0', 10),
+      W: 360, H: 640,
+      gravity: 1200,
+      flap: 320,
+      maxFall: 520,
+      pipeGap: 150,
+      pipeW: 64,
+      pipeSpacing: 180,
+      groundH: 56,
+      speed: 140,
+    };
+
+    const bird = {
+      x: 80, y: 240, r: 14,
+      vy: 0,
+      angle: 0
+    };
+
+    let pipes: any[] = [];
+    let lastPipeX = 0;
+
+    function rand(min: number, max: number) { return Math.random() * (max - min) + min; }
+
+    function resetGame() {
+      G.playing = false;
+      G.paused = false;
+      G.over = false;
+      G.time = 0;
+      G.score = 0;
+      pipes = [];
+      lastPipeX = 0;
+      bird.x = 80;
+      bird.y = G.H / 2;
+      bird.vy = 0;
+      bird.angle = 0;
+      scoreEl.textContent = '0';
+      bestEl.textContent = String(G.best);
+      guideEl.style.display = 'block';
+      guideEl.innerHTML = '⬆️ 탭/클릭/스페이스/↑ 로 점프<br/>장애물을 통과해보세요!';
+    }
+
+    function startGame() {
+      if (G.over) resetGame();
+      if (!G.playing) {
+        G.playing = true;
+        guideEl.style.display = 'none';
+      }
+      flap();
+    }
+
+    function gameOver() {
+      G.playing = false;
+      G.over = true;
+      G.paused = false;
+      guideEl.style.display = 'block';
+      guideEl.textContent = `게임 오버! 점수 ${G.score}  —  다시 시작하려면 탭/클릭/스페이스`;
+      if (G.score > G.best) {
+        G.best = G.score;
+        localStorage.setItem('flappy.best', String(G.best));
+      }
+      bestEl.textContent = String(G.best);
+    }
+
+    function togglePause() {
+      if (!G.playing || G.over) return;
+      G.paused = !G.paused;
+      pauseBtn.textContent = G.paused ? '재개' : '일시정지';
+      guideEl.style.display = G.paused ? 'block' : 'none';
+      if (G.paused) guideEl.textContent = '일시정지 — 재개하려면 버튼/탭/스페이스';
+    }
+
+    function flap() {
+      if (G.over) return;
+      bird.vy = -G.flap;
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (['Space', 'ArrowUp'].includes(e.code)) e.preventDefault();
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (['Space', 'ArrowUp'].includes(e.code)) {
+        if (!G.playing) startGame(); else if (G.paused) togglePause(); else flap();
+      }
+    };
+
+    const onPress = () => {
+      if (!G.playing) startGame();
+      else if (G.paused) togglePause();
+      else flap();
+    };
+    
+    const handlePointerDown = (e: PointerEvent) => {
+        e.preventDefault();
+        onPress();
+    }
+
+    window.addEventListener('keydown', handleKeyDown, { passive: false });
+    window.addEventListener('keyup', handleKeyUp);
+    gameEl.addEventListener('pointerdown', handlePointerDown, { passive: false });
+    pauseBtn.addEventListener('click', togglePause);
+    restartBtn.addEventListener('click', resetGame);
+
+    function spawnPipePair(startX: number) {
+      const safeTop = 60;
+      const safeBottom = G.H - G.groundH - 60;
+      const gapYCenter = rand(safeTop + G.pipeGap / 2, safeBottom - G.pipeGap / 2);
+      const topH = Math.max(10, gapYCenter - G.pipeGap / 2);
+      const bottomY = gapYCenter + G.pipeGap / 2;
+      const bottomH = Math.max(10, (G.H - G.groundH) - bottomY);
+
+      pipes.push({
+        x: startX,
+        w: G.pipeW,
+        top: { y: 0, h: topH, passed: false },
+        bottom: { y: bottomY, h: bottomH }
+      });
+    }
+
+    function updatePipes(dt: number) {
+      if (pipes.length === 0) {
+        spawnPipePair(G.W + 80);
+        lastPipeX = G.W + 80;
+      } else {
+        const last = pipes[pipes.length - 1];
+        if (last.x < G.W - G.pipeSpacing) {
+          spawnPipePair(G.W + 80);
+        }
+      }
+
+      for (const p of pipes) {
+        p.x -= G.speed * dt;
+        if (!p.top.passed && p.x + p.w < bird.x - bird.r) {
+          p.top.passed = true;
+          G.score += 1;
+          scoreEl.textContent = String(G.score);
+        }
+      }
+      pipes = pipes.filter(p => p.x + p.w > -40);
+    }
+
+    function circleRectCollide(cx: number, cy: number, cr: number, rx: number, ry: number, rw: number, rh: number) {
+      const nearestX = Math.max(rx, Math.min(cx, rx + rw));
+      const nearestY = Math.max(ry, Math.min(cy, ry + rh));
+      const dx = cx - nearestX;
+      const dy = cy - nearestY;
+      return (dx * dx + dy * dy) <= cr * cr;
+    }
+
+    function checkCollision() {
+      if (bird.y + bird.r >= G.H - G.groundH || bird.y - bird.r <= 0) {
+        return true;
+      }
+      for (const p of pipes) {
+        if (circleRectCollide(bird.x, bird.y, bird.r, p.x, p.top.y, p.w, p.top.h)) return true;
+        if (circleRectCollide(bird.x, bird.y, bird.r, p.x, p.bottom.y, p.w, p.bottom.h)) return true;
+      }
+      return false;
+    }
+
+    function drawBackground(dt: number, t: number) {
+      ctx.save();
+      const hillY = G.H - G.groundH - 80;
+      const offset = (t * (G.speed * .2)) % (G.W + 120);
+
+      for (let i = -1; i < 4; i++) {
+        const x = i * 160 - offset;
+        ctx.fillStyle = 'rgba(255,255,255,.5)';
+        ctx.beginPath();
+        ctx.ellipse(x + 80, hillY, 60, 20, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawPipes() {
+      for (const p of pipes) {
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--pipe').trim() || '#16a34a';
+        ctx.fillRect(p.x, p.top.y, p.w, p.top.h);
+        ctx.fillRect(p.x, p.bottom.y, p.w, p.bottom.h);
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--pipe-dark').trim() || '#0f7a35';
+        ctx.fillRect(p.x + p.w - 8, p.top.y, 8, p.top.h);
+        ctx.fillRect(p.x + p.w - 8, p.bottom.y, 8, p.bottom.h);
+        ctx.fillRect(p.x - 6, p.top.h - 10, p.w + 12, 10);
+        ctx.fillRect(p.x - 6, p.bottom.y, p.w + 12, 10);
+      }
+    }
+
+    function drawBird() {
+      ctx.save();
+      ctx.translate(bird.x, bird.y);
+      ctx.rotate(bird.angle);
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bird').trim() || '#fbbf24';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, bird.r + 2, bird.r, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(6, -4, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.moveTo(bird.r - 2, 0);
+      ctx.lineTo(bird.r + 8, -2);
+      ctx.lineTo(bird.r - 2, 4);
+      ctx.closePath();
+      ctx.fill();
+      const flapAnim = Math.sin(G.time * 10) * 4;
+      ctx.fillStyle = '#fde68a';
+      ctx.beginPath();
+      ctx.ellipse(-4, 2 + flapAnim * 0.2, 6, 4, -0.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawGround(t: number) {
+      const groundY = G.H - G.groundH;
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ground').trim() || '#8b5a2b';
+      ctx.fillRect(0, groundY, G.W, G.groundH);
+      const stripeW = 24;
+      const offset = (t * G.speed) % stripeW;
+      ctx.fillStyle = 'rgba(0,0,0,.15)';
+      for (let x = -stripeW; x < G.W + stripeW; x += stripeW) {
+        ctx.fillRect(Math.floor(x - offset), groundY, stripeW / 2, G.groundH);
+      }
+    }
+
+    function clearCanvas() {
+      ctx.clearRect(0, 0, G.W, G.H);
+    }
+
+    let prevTs = performance.now();
+    function frame(now: number) {
+      requestAnimationFrame(frame);
+      const dtRaw = (now - prevTs) / 1000;
+      prevTs = now;
+      const dt = Math.min(dtRaw, 0.033);
+
+      if (G.paused) return;
+
+      G.time += dt;
+      clearCanvas();
+      drawBackground(dt, G.time);
+
+      if (G.playing && !G.over) {
+        bird.vy += G.gravity * dt;
+        if (bird.vy > G.maxFall) bird.vy = G.maxFall;
+        bird.y += bird.vy * dt;
+        bird.angle = Math.max(-0.6, Math.min(0.9, bird.vy / 420));
+        updatePipes(dt);
+        if (checkCollision()) {
+          gameOver();
+        }
+      }
+
+      drawPipes();
+      drawBird();
+      drawGround(G.time);
+    }
+    
+    function setupDPR() {
+        const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
+        const cssW = window.innerWidth;
+        const cssH = window.innerHeight;
+        canvas.width = Math.round(cssW * dpr);
+        canvas.height = Math.round(cssH * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        G.W = cssW;
+        G.H = cssH;
+    }
+    window.addEventListener('resize', setupDPR);
+    
+    const handleVisibilityChange = () => {
+        if (document.hidden && G.playing && !G.over) {
+          G.paused = true;
+          pauseBtn.textContent = '재개';
+          guideEl.style.display = 'block';
+          guideEl.textContent = '일시정지 — 재개하려면 버튼/탭/스페이스';
+        }
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    setupDPR();
+    resetGame();
+    requestAnimationFrame((t) => { prevTs = t; requestAnimationFrame(frame); });
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      gameEl.removeEventListener('pointerdown', handlePointerDown);
+      pauseBtn.removeEventListener('click', togglePause);
+      restartBtn.removeEventListener('click', resetGame);
+      window.removeEventListener('resize', setupDPR);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  return (
+    <div className="wrap">
+      <div className="game" id="game" ref={gameRef}>
+        <canvas ref={canvasRef} id="cv" width="360" height="640" aria-label="Flappy Bird Mini Game"></canvas>
+        <div className="hud">
+          <div className="topbar">
+            <div className="score">
+              <span>점수:</span><span id="score" ref={scoreRef}>0</span>
+              <span style={{ opacity: 0.6, marginLeft: '8px' }}>최고:</span><span id="best" ref={bestRef}>0</span>
+            </div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button className="btn" id="btn-pause" ref={pauseBtnRef}>일시정지</button>
+              <button className="btn" id="btn-restart" ref={restartBtnRef}>다시시작</button>
+            </div>
+          </div>
+          <div className="center-guide" id="guide" role="status" ref={guideRef}>
+            ⬆️ 탭/클릭/스페이스/↑ 로 점프<br />
+            장애물을 통과해보세요!
+          </div>
+          <div className="bottom-tip">
+            모바일: 화면 탭 · 데스크탑: 클릭/스페이스/↑ |
+            장애물이나 바닥에 닿으면 게임 오버
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </div>
     </div>
   );
 }
