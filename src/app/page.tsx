@@ -57,13 +57,19 @@ export default function Home() {
       maxFall: 520,
       pipeGap: 150,
       pipeW: 64,
-      pipeSpacing: 180,
+      pipeSpacing: 240,
       groundH: 56,
       // 속도(가속 적용)
       speedBase: 140,
       speedCur: 140,
       speedMax: 300,
       speedAccel: 12, // px/s^2
+      // 파이프 생성 제약사항
+      maxVerticalChange: 150, // 파이프 간 최대 높이 변화
+      minGapFromBird: 120,    // 새 위치에서 최소 거리
+      // 난이도 조절
+      difficultyInterval: 8,   // 점수 간격마다 난이도 증가
+      maxDifficultyLevel: 6,   // 최대 난이도 레벨
     };
 
     // 새
@@ -78,6 +84,44 @@ export default function Home() {
 
     // ===== 유틸 =====
     function rand(min: number, max: number) { return Math.random() * (max - min) + min; }
+
+    // 현재 점수에 따른 난이도 계산
+    function getCurrentDifficulty(): number {
+      return Math.min(
+        Math.floor(G.score / G.difficultyInterval),
+        G.maxDifficultyLevel
+      );
+    }
+
+    // 난이도에 따른 동적 값 계산
+    function getDynamicValues() {
+      const difficulty = getCurrentDifficulty();
+      return {
+        maxVerticalChange: Math.max(80, G.maxVerticalChange - difficulty * 12),
+        minGapFromBird: Math.max(60, G.minGapFromBird - difficulty * 10),
+        pipeGap: Math.max(110, G.pipeGap - difficulty * 8)
+      };
+    }
+
+    // 두 파이프 사이를 새가 통과할 수 있는지 확인
+    function canBirdPassBetween(pipe1: Pipe, pipe2: Pipe, birdRadius: number = bird.r): boolean {
+      if (!pipe1 || !pipe2) return true;
+
+      // 두 파이프 사이의 최대/최소 높이 찾기
+      const pipe1GapTop = pipe1.top.h;
+      const pipe1GapBottom = pipe1.bottom.y;
+      const pipe2GapTop = pipe2.top.h;
+      const pipe2GapBottom = pipe2.bottom.y;
+
+      // 경사진 경로의 최고점과 최저점
+      const minGapTop = Math.max(pipe1GapTop, pipe2GapTop);
+      const maxGapBottom = Math.min(pipe1GapBottom, pipe2GapBottom);
+
+      // 새가 통과할 수 있는 최소 공간
+      const requiredGap = birdRadius * 2 + 20; // 여유 공간 추가
+
+      return (maxGapBottom - minGapTop) >= requiredGap;
+    }
 
     function resetGame() {
       G.playing = false;
@@ -171,9 +215,89 @@ export default function Home() {
     function spawnPipePair(startX: number) {
       const safeTop = 60;
       const safeBottom = G.H - G.groundH - 60;
-      const gapYCenter = rand(safeTop + G.pipeGap / 2, safeBottom - G.pipeGap / 2);
-      const topH = Math.max(10, gapYCenter - G.pipeGap / 2);
-      const bottomY = gapYCenter + G.pipeGap / 2;
+      const maxAttempts = 10; // 최대 재시도 횟수
+
+      // 현재 난이도에 따른 동적 값 사용
+      const dynamicValues = getDynamicValues();
+      const currentPipeGap = dynamicValues.pipeGap;
+      const currentMaxVerticalChange = dynamicValues.maxVerticalChange;
+      const currentMinGapFromBird = dynamicValues.minGapFromBird;
+
+      let gapYCenter: number;
+      let attempts = 0;
+
+      do {
+        if (pipes.length === 0) {
+          // 첫 파이프는 중간 범위에 생성
+          const screenCenter = G.H / 2;
+          const minY = Math.max(safeTop + currentPipeGap / 2, screenCenter - 100);
+          const maxY = Math.min(safeBottom - currentPipeGap / 2, screenCenter + 100);
+          gapYCenter = rand(minY, maxY);
+        } else {
+          // 이전 파이프와 적절한 간격 유지
+          const lastPipe = pipes[pipes.length - 1];
+          const lastGapCenter = lastPipe.top.h + currentPipeGap / 2;
+
+          // 화면 중앙을 기준으로 한 안전 범위
+          const screenCenter = G.H / 2;
+          const centerBuffer = 120; // 중앙 주변 버퍼
+
+          // 이전 파이프에서 너무 많이 벗어나지 않도록 제한
+          let minY = Math.max(
+            safeTop + currentPipeGap / 2,
+            lastGapCenter - currentMaxVerticalChange
+          );
+          let maxY = Math.min(
+            safeBottom - currentPipeGap / 2,
+            lastGapCenter + currentMaxVerticalChange
+          );
+
+          // 극단적인 위치 방지 - 너무 위나 아래로 가지 않도록
+          const extremeTop = safeTop + currentPipeGap / 2 + 40;
+          const extremeBottom = safeBottom - currentPipeGap / 2 - 40;
+
+          if (lastGapCenter < screenCenter - centerBuffer) {
+            // 현재 너무 위쪽에 있으면 중앙이나 아래로 유도
+            minY = Math.max(minY, lastGapCenter);
+            maxY = Math.min(maxY, screenCenter + centerBuffer);
+          } else if (lastGapCenter > screenCenter + centerBuffer) {
+            // 현재 너무 아래쪽에 있으면 중앙이나 위로 유도
+            minY = Math.max(minY, screenCenter - centerBuffer);
+            maxY = Math.min(maxY, lastGapCenter);
+          }
+
+          // 최종 극단 제한
+          minY = Math.max(minY, extremeTop);
+          maxY = Math.min(maxY, extremeBottom);
+
+          gapYCenter = rand(minY, maxY);
+        }
+
+        const topH = Math.max(10, gapYCenter - currentPipeGap / 2);
+        const bottomY = gapYCenter + currentPipeGap / 2;
+        const bottomH = Math.max(10, (G.H - G.groundH) - bottomY);
+
+        const newPipe: Pipe = {
+          x: startX,
+          w: G.pipeW,
+          top: { y: 0, h: topH, passed: false },
+          bottom: { y: bottomY, h: bottomH }
+        };
+
+        // 이전 파이프와 통과 가능성 검증
+        const lastPipe = pipes[pipes.length - 1];
+        if (!lastPipe || canBirdPassBetween(lastPipe, newPipe)) {
+          pipes.push(newPipe);
+          return; // 성공적으로 생성
+        }
+
+        attempts++;
+      } while (attempts < maxAttempts);
+
+      // 최대 재시도에도 실패한 경우, 안전한 기본값으로 생성
+      const safeCenterY = (safeTop + safeBottom) / 2;
+      const topH = Math.max(10, safeCenterY - currentPipeGap / 2);
+      const bottomY = safeCenterY + currentPipeGap / 2;
       const bottomH = Math.max(10, (G.H - G.groundH) - bottomY);
 
       pipes.push({
@@ -395,15 +519,39 @@ export default function Home() {
 
       {/* HUD가 모바일에서도 확실히 보이도록 글로벌 스타일 추가 */}
       <style jsx global>{`
-        html, body { margin: 0; height: 100%; background: #0ea5e9; }
-        .wrap { height: 100vh; width: 100vw; }
+        html, body {
+          margin: 0;
+          height: 100%;
+          background: #0ea5e9;
+          user-select: none;
+          -webkit-user-select: none;
+          -moz-user-select: none;
+          -ms-user-select: none;
+          touch-action: manipulation;
+        }
+        .wrap {
+          height: 100vh;
+          width: 100vw;
+          user-select: none;
+          -webkit-user-select: none;
+        }
         .game {
           position: fixed;
           inset: 0;
           background: linear-gradient(#7dd3fc, #38bdf8);
           overflow: hidden;
+          user-select: none;
+          -webkit-user-select: none;
+          touch-action: manipulation;
         }
-        canvas { width: 100%; height: 100%; display: block; }
+        canvas {
+          width: 100%;
+          height: 100%;
+          display: block;
+          user-select: none;
+          -webkit-user-select: none;
+          touch-action: manipulation;
+        }
 
         .hud {
           position: absolute;
@@ -443,6 +591,9 @@ export default function Home() {
           padding: 6px 10px;
           border-radius: 10px;
           font-weight: 700;
+          user-select: none;
+          -webkit-user-select: none;
+          touch-action: manipulation;
         }
         .center-guide {
           align-self: center;
