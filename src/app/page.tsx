@@ -62,8 +62,8 @@ export default function Home() {
       // 속도(가속 적용)
       speedBase: 140,
       speedCur: 140,
-      speedMax: 300,
-      speedAccel: 12, // px/s^2
+      speedMax: 500,
+      speedAccel: 18, // px/s^2
       // 파이프 생성 제약사항
       maxVerticalChange: 150, // 파이프 간 최대 높이 변화
       minGapFromBird: 120,    // 새 위치에서 최소 거리
@@ -346,17 +346,53 @@ export default function Home() {
     // ===== 렌더 =====
     function drawBackground(_dt: number, t: number) {
       ctx.save();
-      const hillY = G.H - G.groundH - 80;
-      const offset = (t * (G.speedCur * .2)) % (G.W + 120);
 
-      for (let i = -1; i < 4; i++) {
-        const x = i * 160 - offset;
-        ctx.fillStyle = 'rgba(255,255,255,.5)';
-        ctx.beginPath();
-        ctx.ellipse(x + 80, hillY, 60, 20, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      // 여러 층의 구름 생성
+      const layers = [
+        { y: G.H * 0.15, speed: 0.1, alpha: 0.25, size: 0.7 },
+        { y: G.H * 0.35, speed: 0.15, alpha: 0.3, size: 0.8 }
+      ];
+
+      layers.forEach(layer => {
+        const cloudSpacing = 180;
+        const totalWidth = cloudSpacing * 6; // 6개 구름의 총 너비
+        const offset = (t * (G.speedCur * layer.speed)) % totalWidth;
+
+        // 화면을 덮기에 충분한 개수의 구름을 생성
+        const numClouds = Math.ceil((G.W + 400) / cloudSpacing) + 2;
+
+        for (let i = 0; i < numClouds; i++) {
+          const baseX = i * cloudSpacing - offset - 200;
+
+          // 화면 밖에서도 구름이 연속적으로 보이도록
+          drawCloud(baseX, layer.y, layer.size, layer.alpha);
+        }
+      });
+
       ctx.restore();
+    }
+
+    function drawCloud(x: number, y: number, size: number, alpha: number) {
+      ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+
+      // 메인 구름 몸체
+      const baseSize = 40 * size;
+
+      // 구름을 여러 개의 원으로 구성
+      const cloudParts = [
+        { x: x - 20 * size, y: y, r: baseSize * 0.7 },
+        { x: x + 10 * size, y: y - 5 * size, r: baseSize * 0.8 },
+        { x: x + 40 * size, y: y, r: baseSize * 0.6 },
+        { x: x + 60 * size, y: y + 5 * size, r: baseSize * 0.5 },
+        { x: x, y: y - 15 * size, r: baseSize * 0.9 },
+        { x: x + 25 * size, y: y - 20 * size, r: baseSize * 0.7 }
+      ];
+
+      cloudParts.forEach(part => {
+        ctx.beginPath();
+        ctx.ellipse(part.x, part.y, part.r, part.r * 0.8, 0, 0, Math.PI * 2);
+        ctx.fill();
+      });
     }
 
     function drawPipes() {
