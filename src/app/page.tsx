@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import React, { useEffect, useRef } from 'react';
+import { useContentArcade } from '../hooks/useContentArcade';
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -10,6 +12,21 @@ export default function Home() {
   const pauseBtnRef = useRef<HTMLButtonElement>(null);
   const restartBtnRef = useRef<HTMLButtonElement>(null);
   const gameRef = useRef<HTMLDivElement>(null);
+
+  // ContentArcade SDK 연동
+  const {
+    isConnected,
+    userInfo,
+    rewards,
+    adState,
+    pauseRequested,
+    startGame: notifyGameStart,
+    endGame: notifyGameEnd,
+    showAd,
+    reportError,
+    notifyPause,
+    notifyResume
+  } = useContentArcade();
 
   useEffect(() => {
     // ===== 타입 정의 =====
@@ -142,26 +159,85 @@ export default function Home() {
     }
 
     function startGame() {
-      if (G.over) resetGame();
+      console.log('🎮 startGame 함수 호출됨, 현재 상태:', { playing: G.playing, over: G.over });
+      if (G.over) {
+        console.log('🔄 게임 오버 상태였으므로 resetGame 호출');
+        resetGame();
+      }
       if (!G.playing) {
+        console.log('🎮 게임 시작 - playing 상태 변경');
         G.playing = true;
         guideEl_.style.display = 'none';
+        // SDK에 게임 시작 알림
+        console.log('📡 SDK에 게임 시작 알림 전송 시도');
+        notifyGameStart();
       }
       // 시작 직후 플랩은 점수에 포함 X (공정성)
       flap();
     }
 
     function gameOver() {
+      console.log('💀 gameOver 함수 호출됨, 현재 점수:', G.score);
       G.playing = false;
       G.over = true;
       G.paused = false;
+
+      // SDK에 게임 종료 알림 (점수에 따라 성공/실패 판단)
+      const success = G.score >= 10; // 10점 이상이면 성공으로 간주
+      console.log('📡 SDK에 게임 종료 알림 전송 시도:', { success, score: G.score });
+      notifyGameEnd(success, G.score);
+
       guideEl_.style.display = 'block';
-      guideEl_.textContent = `게임 오버! 점수 ${G.score}  —  다시 시작하려면 탭/클릭/스페이스`;
+      guideEl_.innerHTML = `
+        <div style="text-align: center;">
+          <div style="font-size: 20px; margin-bottom: 15px;">💀 게임 오버!</div>
+          <div style="font-size: 16px; margin-bottom: 20px;">점수: ${G.score}${G.score > G.best ? ' 🎉 신기록!' : ''}</div>
+          <div style="display: flex; justify-content: center; margin-bottom: 15px;">
+            <button id="gameOverAd" style="
+              background: #f59e0b;
+              border: 1px solid rgba(255,255,255,.4);
+              color: black;
+              padding: 12px 20px;
+              border-radius: 12px;
+              cursor: pointer;
+              font-weight: bold;
+              font-size: 16px;
+              pointer-events: auto;
+              box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            ">📺 광고보고 다시하기</button>
+          </div>
+          <div style="font-size: 12px; opacity: 0.7;">광고를 시청하면 새 게임을 시작할 수 있습니다</div>
+        </div>
+      `;
+
       if (G.score > G.best) {
         G.best = G.score;
         localStorage.setItem('flappy.best', String(G.best));
       }
       bestEl_.textContent = String(G.best);
+
+      // 게임 오버 광고 버튼 이벤트 리스너 추가
+      const adBtn = document.getElementById('gameOverAd');
+
+      const handleAdShow = async () => {
+        console.log('📺 게임 오버 모달에서 광고보기 버튼 클릭됨');
+        try {
+          const success = await showAd();
+          console.log('광고 요청 결과:', success);
+          if (success) {
+            console.log('광고 시스템 초기화 성공 - 부모에서 광고 처리 중');
+          } else {
+            console.log('광고 요청 실패');
+          }
+        } catch (error) {
+          console.error('광고 요청 에러:', error);
+        }
+      };
+
+      if (adBtn) {
+        adBtn.addEventListener('click', handleAdShow);
+        console.log('🎮 게임 오버 광고 버튼 이벤트 리스너 등록됨');
+      }
     }
 
     function togglePause() {
@@ -169,8 +245,34 @@ export default function Home() {
       G.paused = !G.paused;
       pauseBtn_.textContent = G.paused ? '재개' : '일시정지';
       guideEl_.style.display = G.paused ? 'block' : 'none';
-      if (G.paused) guideEl_.textContent = '일시정지 — 재개하려면 버튼/탭/스페이스';
+      if (G.paused) {
+        guideEl_.textContent = '일시정지 — 재개하려면 버튼/탭/스페이스';
+        notifyPause();
+      } else {
+        notifyResume();
+      }
     }
+
+    function setPauseState(paused: boolean) {
+      if (!G.playing || G.over) return;
+      G.paused = paused;
+      pauseBtn_.textContent = G.paused ? '재개' : '일시정지';
+      guideEl_.style.display = G.paused ? 'block' : 'none';
+      if (G.paused) guideEl_.textContent = '부모에서 일시정지됨 — 재개 대기중';
+    }
+
+    // 외부에서 pause 상태를 설정할 수 있도록 window에 등록
+    (window as any).flappyGameSetPause = setPauseState;
+
+    // 광고 보상 후 게임 재시작 함수
+    (window as any).flappyGameRestartAfterAd = () => {
+      console.log('🎁 광고 보상 받음 - 게임 재시작');
+      resetGame();
+      // 게임 오버 상태 초기화
+      G.over = false;
+      G.playing = false;
+      startGame();
+    };
 
     function flap() {
       if (G.over) return;
@@ -192,17 +294,19 @@ export default function Home() {
 
     const handleKeyUp = (e: KeyboardEvent) => {
       if (['Space', 'ArrowUp'].includes(e.code)) {
-        if (!G.playing) startGame();
-        else if (G.paused) togglePause();
-        else { flap(); addScoreByFlap(); }
+        // 게임 오버 상태에서는 입력으로 재시작 불가
+        if (!G.playing && !G.over) startGame();
+        else if (G.playing && G.paused) togglePause();
+        else if (G.playing && !G.paused) { flap(); addScoreByFlap(); }
       }
     };
 
     const handlePointerDown = (e: PointerEvent) => {
       e.preventDefault();
-      if (!G.playing) startGame();
-      else if (G.paused) togglePause();
-      else { flap(); addScoreByFlap(); }
+      // 게임 오버 상태에서는 입력으로 재시작 불가
+      if (!G.playing && !G.over) startGame();
+      else if (G.playing && G.paused) togglePause();
+      else if (G.playing && !G.paused) { flap(); addScoreByFlap(); }
     };
 
     window.addEventListener('keydown', handleKeyDown, { passive: false });
@@ -528,6 +632,13 @@ export default function Home() {
     };
   }, []);
 
+  // pauseRequested 상태 변화에 반응
+  useEffect(() => {
+    if ((window as any).flappyGameSetPause) {
+      (window as any).flappyGameSetPause(pauseRequested);
+    }
+  }, [pauseRequested]);
+
   return (
     <div className="wrap">
       <div className="game" id="game" ref={gameRef}>
@@ -537,16 +648,71 @@ export default function Home() {
             <div className="score">
               <span>점수:</span><span id="score" ref={scoreRef}>0</span>
               <span style={{ opacity: 0.6, marginLeft: '8px' }}>최고:</span><span id="best" ref={bestRef}>0</span>
+              {/* SDK 상태 버튼을 점수 옆에 */}
+              <button
+                className="sdk-status-btn"
+                style={{
+                  background: isConnected ? '#10b981' : '#ef4444',
+                  color: 'white',
+                  border: 'none',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  fontSize: '10px',
+                  cursor: 'default',
+                  marginLeft: '12px'
+                }}
+              >
+                {isConnected ? '🟢 연결됨' : '🔴 연결안됨'}
+              </button>
             </div>
             <div className="buttons">
               <button className="btn" id="btn-pause" ref={pauseBtnRef}>일시정지</button>
               <button className="btn" id="btn-restart" ref={restartBtnRef}>다시시작</button>
+              <button
+                className="btn ad-btn"
+                onClick={showAd}
+                disabled={adState !== 'idle'}
+                style={{
+                  backgroundColor: adState === 'idle' ? '#f59e0b' : '#6b7280',
+                  opacity: adState === 'idle' ? 1 : 0.5
+                }}
+              >
+                {adState === 'idle' ? '📺 광고보기' :
+                 adState === 'requested' ? '요청중...' :
+                 adState === 'playing' ? '재생중...' : '완료'}
+              </button>
             </div>
           </div>
           <div className="center-guide" id="guide" role="status" ref={guideRef}>
             ⬆️ 탭/클릭/스페이스/↑ 로 점프<br />
             장애물을 통과해보세요!
           </div>
+
+          {/* 보상 표시 */}
+          {rewards.length > 0 && (
+            <div className="rewards-display">
+              <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>
+                🎁 받은 보상:
+              </div>
+              {rewards.map((reward, index) => (
+                <div
+                  key={index}
+                  style={{
+                    background: 'rgba(251, 191, 36, 0.9)',
+                    color: '#000',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    marginBottom: '4px'
+                  }}
+                >
+                  💰 {reward.amount} {reward.currency}
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="bottom-tip">
             모바일: 화면 탭 · 데스크탑: 클릭/스페이스/↑ | 장애물이나 바닥에 닿으면 게임 오버
           </div>
@@ -630,6 +796,24 @@ export default function Home() {
           user-select: none;
           -webkit-user-select: none;
           touch-action: manipulation;
+          pointer-events: auto;
+          cursor: pointer;
+        }
+        .ad-btn {
+          background: #f59e0b !important;
+          color: #000 !important;
+          font-weight: 800 !important;
+        }
+        .rewards-display {
+          position: absolute;
+          top: 100px;
+          right: 16px;
+          background: rgba(0,0,0,.7);
+          padding: 12px;
+          border-radius: 8px;
+          color: #fff;
+          min-width: 120px;
+          pointer-events: none;
         }
         .center-guide {
           align-self: center;
