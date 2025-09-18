@@ -645,6 +645,15 @@ export default function Home() {
 
   // 보상 페이드아웃 애니메이션
   useEffect(() => {
+    // 모든 보상이 사라진 경우 visibility 상태 초기화
+    const hasVisibleRewards = rewards.some((_, index) => rewardVisibility[index] !== false);
+    if (rewards.length === 0 || !hasVisibleRewards) {
+      if (Object.keys(rewardVisibility).length > 0) {
+        setRewardVisibility({});
+      }
+      return;
+    }
+
     rewards.forEach((_, index) => {
       if (rewardVisibility[index] === undefined) {
         // 새 보상이 추가되면 3초 후 페이드아웃
@@ -720,8 +729,8 @@ export default function Home() {
             장애물을 통과해보세요!
           </div>
 
-          {/* 보상 표시 */}
-          {rewards.length > 0 && (
+          {/* 보상 표시 - 보이는 보상이 있을 때만 표시 */}
+          {rewards.length > 0 && rewards.some((_, index) => rewardVisibility[index] !== false) && (
             <div className="rewards-display">
               <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>
                 🎁 받은 보상:
@@ -849,7 +858,7 @@ export default function Home() {
         }
         .rewards-display {
           position: absolute;
-          top: 100px;
+          top: 120px;
           right: 16px;
           background: rgba(0,0,0,.7);
           padding: 12px;
