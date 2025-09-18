@@ -15,6 +15,7 @@ export default function Home() {
 
   // 로컬 보상 관리를 위한 state
   const [localRewards, setLocalRewards] = useState<Array<{ amount: number; currency: string; id: number; fadeOut?: boolean }>>([]);
+  const [rewardsContainerFadeOut, setRewardsContainerFadeOut] = useState(false);
 
   // ContentArcade SDK 연동
   const {
@@ -668,7 +669,21 @@ export default function Home() {
 
         // 3.5초 후 완전 제거
         setTimeout(() => {
-          setLocalRewards(prev => prev.filter(r => r.id !== rewardId));
+          setLocalRewards(prev => {
+            const updatedRewards = prev.filter(r => r.id !== rewardId);
+
+            // 이게 마지막 보상이었다면 컨테이너 페이드아웃 시작
+            if (updatedRewards.length === 0) {
+              setRewardsContainerFadeOut(true);
+
+              // 컨테이너 페이드아웃 완료 후 숨김
+              setTimeout(() => {
+                setRewardsContainerFadeOut(false);
+              }, 500); // 0.5초 페이드아웃
+            }
+
+            return updatedRewards;
+          });
         }, 3500);
       });
     }
@@ -737,9 +752,9 @@ export default function Home() {
             장애물을 통과해보세요!
           </div>
 
-          {/* 보상 표시 - 로컬 보상이 있을 때만 표시 */}
-          {localRewards.length > 0 && (
-            <div className="rewards-display">
+          {/* 보상 표시 - 로컬 보상이 있거나 페이드아웃 중일 때 표시 */}
+          {(localRewards.length > 0 || rewardsContainerFadeOut) && (
+            <div className={`rewards-display ${rewardsContainerFadeOut ? 'container-fade-out' : ''}`}>
               <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>
                 🎁 받은 보상:
               </div>
@@ -889,6 +904,11 @@ export default function Home() {
 
         .reward-item.fade-out {
           opacity: 0;
+        }
+
+        .rewards-display.container-fade-out {
+          opacity: 0;
+          transition: opacity 0.5s ease-out;
         }
         .center-guide {
           align-self: center;
