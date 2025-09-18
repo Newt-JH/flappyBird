@@ -15,7 +15,6 @@ export default function Home() {
 
   // 로컬 보상 관리를 위한 state
   const [localRewards, setLocalRewards] = useState<Array<{ amount: number; currency: string; id: number; fadeOut?: boolean }>>([]);
-  const [rewardIdCounter, setRewardIdCounter] = useState(0);
 
   // ContentArcade SDK 연동
   const {
@@ -644,29 +643,36 @@ export default function Home() {
     }
   }, [pauseRequested]);
 
-  // SDK에서 새 보상이 오면 로컬 보상에 추가
-  useEffect(() => {
-    if (rewards.length > localRewards.length) {
-      const newRewards = rewards.slice(localRewards.length);
-      newRewards.forEach(reward => {
-        const newReward = { ...reward, id: rewardIdCounter, fadeOut: false };
-        setLocalRewards(prev => [...prev, newReward]);
-        setRewardIdCounter(prev => prev + 1);
+  // SDK 보상이 증가할 때마다 새 보상 추가 (간단한 방식)
+  const processedRewardsRef = useRef(0);
 
-        // 2.5초 후 페이드아웃 시작
+  useEffect(() => {
+    if (rewards.length > processedRewardsRef.current) {
+      // 새로 들어온 보상들만 처리
+      const newRewards = rewards.slice(processedRewardsRef.current);
+      processedRewardsRef.current = rewards.length;
+
+      newRewards.forEach((reward, index) => {
+        const rewardId = Date.now() + index;
+        const newReward = { ...reward, id: rewardId, fadeOut: false };
+
+        // 즉시 추가
+        setLocalRewards(prev => [...prev, newReward]);
+
+        // 3초 후 페이드아웃 시작
         setTimeout(() => {
           setLocalRewards(prev =>
-            prev.map(r => r.id === newReward.id ? { ...r, fadeOut: true } : r)
+            prev.map(r => r.id === rewardId ? { ...r, fadeOut: true } : r)
           );
-        }, 2500);
-
-        // 3초 후 완전히 제거
-        setTimeout(() => {
-          setLocalRewards(prev => prev.filter(r => r.id !== newReward.id));
         }, 3000);
+
+        // 3.5초 후 완전 제거
+        setTimeout(() => {
+          setLocalRewards(prev => prev.filter(r => r.id !== rewardId));
+        }, 3500);
       });
     }
-  }, [rewards, localRewards.length, rewardIdCounter]);
+  }, [rewards]);
 
   return (
     <div className="wrap">
