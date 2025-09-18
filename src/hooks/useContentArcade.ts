@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
@@ -74,12 +75,18 @@ export const useContentArcade = () => {
 
       const childSDK = window.ContentArcade.createChildSDK({
         allowedParent: (origin: string) => {
-          // 로컬 테스트용 설정
+          // 로컬 테스트 + 배포 환경 설정
           const hostname = new URL(origin).hostname.toLowerCase();
           return hostname === 'localhost' ||
                  hostname === '127.0.0.1' ||
                  hostname === 'treasurecomics.com' ||
-                 hostname.endsWith('.treasurecomics.com');
+                 hostname.endsWith('.treasurecomics.com') ||
+                 hostname.endsWith('.vercel.app') ||
+                 hostname.endsWith('.amazonaws.com') ||
+                 hostname.endsWith('.s3.amazonaws.com') ||
+                 hostname.endsWith('.s3-website.amazonaws.com') ||
+                 hostname.endsWith('.s3-website-us-east-1.amazonaws.com') ||
+                 hostname.endsWith('.cloudfront.net');
         },
         requestTimeoutMs: 6000,
         ackTimeoutMs: 3000,
