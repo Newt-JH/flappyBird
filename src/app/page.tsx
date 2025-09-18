@@ -13,8 +13,9 @@ export default function Home() {
   const restartBtnRef = useRef<HTMLButtonElement>(null);
   const gameRef = useRef<HTMLDivElement>(null);
 
-  // 보상 페이드아웃 애니메이션을 위한 state
-  const [rewardVisibility, setRewardVisibility] = useState<{ [key: number]: boolean }>({});
+  // 로컬 보상 관리를 위한 state
+  const [localRewards, setLocalRewards] = useState<Array<{ amount: number; currency: string; id: number; fadeOut?: boolean }>>([]);
+  const [rewardIdCounter, setRewardIdCounter] = useState(0);
 
   // ContentArcade SDK 연동
   const {
@@ -643,28 +644,29 @@ export default function Home() {
     }
   }, [pauseRequested]);
 
-  // 보상 페이드아웃 애니메이션
+  // SDK에서 새 보상이 오면 로컬 보상에 추가
   useEffect(() => {
-    // 모든 보상이 사라진 경우 visibility 상태 초기화
-    const hasVisibleRewards = rewards.some((_, index) => rewardVisibility[index] !== false);
-    if (rewards.length === 0 || !hasVisibleRewards) {
-      if (Object.keys(rewardVisibility).length > 0) {
-        setRewardVisibility({});
-      }
-      return;
-    }
+    if (rewards.length > localRewards.length) {
+      const newRewards = rewards.slice(localRewards.length);
+      newRewards.forEach(reward => {
+        const newReward = { ...reward, id: rewardIdCounter, fadeOut: false };
+        setLocalRewards(prev => [...prev, newReward]);
+        setRewardIdCounter(prev => prev + 1);
 
-    rewards.forEach((_, index) => {
-      if (rewardVisibility[index] === undefined) {
-        // 새 보상이 추가되면 3초 후 페이드아웃
-        setRewardVisibility(prev => ({ ...prev, [index]: true }));
-
+        // 2.5초 후 페이드아웃 시작
         setTimeout(() => {
-          setRewardVisibility(prev => ({ ...prev, [index]: false }));
+          setLocalRewards(prev =>
+            prev.map(r => r.id === newReward.id ? { ...r, fadeOut: true } : r)
+          );
+        }, 2500);
+
+        // 3초 후 완전히 제거
+        setTimeout(() => {
+          setLocalRewards(prev => prev.filter(r => r.id !== newReward.id));
         }, 3000);
-      }
-    });
-  }, [rewards, rewardVisibility]);
+      });
+    }
+  }, [rewards, localRewards.length, rewardIdCounter]);
 
   return (
     <div className="wrap">
@@ -729,16 +731,16 @@ export default function Home() {
             장애물을 통과해보세요!
           </div>
 
-          {/* 보상 표시 - 보이는 보상이 있을 때만 표시 */}
-          {rewards.length > 0 && rewards.some((_, index) => rewardVisibility[index] !== false) && (
+          {/* 보상 표시 - 로컬 보상이 있을 때만 표시 */}
+          {localRewards.length > 0 && (
             <div className="rewards-display">
               <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>
                 🎁 받은 보상:
               </div>
-              {rewards.map((reward, index) => (
+              {localRewards.map((reward) => (
                 <div
-                  key={index}
-                  className={`reward-item ${rewardVisibility[index] === false ? 'fade-out' : ''}`}
+                  key={reward.id}
+                  className={`reward-item ${reward.fadeOut ? 'fade-out' : ''}`}
                   style={{
                     background: 'rgba(251, 191, 36, 0.9)',
                     color: '#000',
