@@ -25,7 +25,8 @@ export default function Home() {
     showAd,
     reportError,
     notifyPause,
-    notifyResume
+    notifyResume,
+    openNewWindow
   } = useContentArcade();
 
   useEffect(() => {
@@ -680,6 +681,16 @@ export default function Home() {
                 {adState === 'idle' ? '📺 광고보기' :
                  adState === 'requested' ? '요청중...' :
                  adState === 'playing' ? '재생중...' : '완료'}
+              </button>
+              <button
+                className="btn"
+                onClick={openNewWindow}
+                style={{
+                  backgroundColor: '#8b5cf6',
+                  color: 'white'
+                }}
+              >
+                🪟 새 창
               </button>
             </div>
           </div>

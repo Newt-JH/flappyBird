@@ -260,6 +260,27 @@ export const useContentArcade = () => {
     }
   };
 
+  const openNewWindow = async () => {
+    const currentSDK = sdk || (window as any).flappyBirdSDK;
+    if (currentSDK) {
+      try {
+        // 부모에게 새 창 열기 요청 (특별한 URL로 구분)
+        const result = await currentSDK.openUrl({
+          href: 'parent://new-window', // 부모창 새 창 열기 요청
+          target: '_blank'
+        });
+        console.log('🪟 부모에게 새 창 열기 요청 결과:', result);
+        return result.ok;
+      } catch (error) {
+        console.error('새 창 열기 요청 실패:', error);
+        return false;
+      }
+    } else {
+      console.warn('🪟 새 창 열기 실패: SDK가 연결되지 않음');
+      return false;
+    }
+  };
+
   return {
     sdk,
     isConnected,
@@ -272,6 +293,7 @@ export const useContentArcade = () => {
     showAd,
     reportError,
     notifyPause,
-    notifyResume
+    notifyResume,
+    openNewWindow
   };
 };
