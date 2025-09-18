@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useContentArcade } from '../hooks/useContentArcade';
 
 export default function Home() {
@@ -12,6 +12,9 @@ export default function Home() {
   const pauseBtnRef = useRef<HTMLButtonElement>(null);
   const restartBtnRef = useRef<HTMLButtonElement>(null);
   const gameRef = useRef<HTMLDivElement>(null);
+
+  // 보상 페이드아웃 애니메이션을 위한 state
+  const [rewardVisibility, setRewardVisibility] = useState<{ [key: number]: boolean }>({});
 
   // ContentArcade SDK 연동
   const {
@@ -640,59 +643,77 @@ export default function Home() {
     }
   }, [pauseRequested]);
 
+  // 보상 페이드아웃 애니메이션
+  useEffect(() => {
+    rewards.forEach((_, index) => {
+      if (rewardVisibility[index] === undefined) {
+        // 새 보상이 추가되면 3초 후 페이드아웃
+        setRewardVisibility(prev => ({ ...prev, [index]: true }));
+
+        setTimeout(() => {
+          setRewardVisibility(prev => ({ ...prev, [index]: false }));
+        }, 3000);
+      }
+    });
+  }, [rewards, rewardVisibility]);
+
   return (
     <div className="wrap">
       <div className="game" id="game" ref={gameRef}>
         <canvas ref={canvasRef} id="cv" width="360" height="640" aria-label="Flappy Bird Mini Game"></canvas>
         <div className="hud">
-          <div className="topbar">
+          {/* 첫 번째 줄: 점수(좌측) + 연결상태(우측) 가로 꽉차게 */}
+          <div className="top-row">
             <div className="score">
               <span>점수:</span><span id="score" ref={scoreRef}>0</span>
               <span style={{ opacity: 0.6, marginLeft: '8px' }}>최고:</span><span id="best" ref={bestRef}>0</span>
-              {/* SDK 상태 버튼을 점수 옆에 */}
-              <button
-                className="sdk-status-btn"
-                style={{
-                  background: isConnected ? '#10b981' : '#ef4444',
-                  color: 'white',
-                  border: 'none',
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  fontSize: '10px',
-                  cursor: 'default',
-                  marginLeft: '12px'
-                }}
-              >
-                {isConnected ? '🟢 연결됨' : '🔴 연결안됨'}
-              </button>
             </div>
-            <div className="buttons">
-              <button className="btn" id="btn-pause" ref={pauseBtnRef}>일시정지</button>
-              <button className="btn" id="btn-restart" ref={restartBtnRef}>다시시작</button>
-              <button
-                className="btn ad-btn"
-                onClick={showAd}
-                disabled={adState !== 'idle'}
-                style={{
-                  backgroundColor: adState === 'idle' ? '#f59e0b' : '#6b7280',
-                  opacity: adState === 'idle' ? 1 : 0.5
-                }}
-              >
-                {adState === 'idle' ? '📺 광고보기' :
-                 adState === 'requested' ? '요청중...' :
-                 adState === 'playing' ? '재생중...' : '완료'}
-              </button>
-              <button
-                className="btn"
-                onClick={openNewWindow}
-                style={{
-                  backgroundColor: '#8b5cf6',
-                  color: 'white'
-                }}
-              >
-                🪟 새 창
-              </button>
-            </div>
+            <button
+              className="sdk-status-btn"
+              style={{
+                background: isConnected ? '#10b981' : '#ef4444',
+                color: 'white',
+                border: '1px solid rgba(255,255,255,.25)',
+                padding: 'clamp(6px, 2vw, 8px) clamp(10px, 3vw, 16px)',
+                borderRadius: 'clamp(8px, 2vw, 12px)',
+                fontSize: 'clamp(14px, 3.5vw, 20px)',
+                cursor: 'default',
+                fontWeight: '800',
+                textShadow: '0 1px 2px rgba(0,0,0,.6)',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {isConnected ? <>🟢&nbsp;&nbsp;SDK 연결됨</> : <>🔴&nbsp;&nbsp;SDK 연결안됨</>}
+            </button>
+          </div>
+
+          {/* 두 번째 줄: 컨트롤 버튼들 가로 꽉차게 */}
+          <div className="control-buttons">
+            <button className="btn" id="btn-pause" ref={pauseBtnRef}>일시정지</button>
+            <button className="btn" id="btn-restart" ref={restartBtnRef}>다시시작</button>
+            <button
+              className="btn ad-btn"
+              onClick={showAd}
+              disabled={adState !== 'idle'}
+              style={{
+                backgroundColor: adState === 'idle' ? '#f59e0b' : '#6b7280',
+                opacity: adState === 'idle' ? 1 : 0.5
+              }}
+            >
+              {adState === 'idle' ? <>📺&nbsp;&nbsp;광고보기</> :
+               adState === 'requested' ? '요청중...' :
+               adState === 'playing' ? '재생중...' : '완료'}
+            </button>
+            <button
+              className="btn"
+              onClick={openNewWindow}
+              style={{
+                backgroundColor: '#8b5cf6',
+                color: 'white'
+              }}
+            >
+              <>🪟&nbsp;&nbsp;새 창</>
+            </button>
           </div>
           <div className="center-guide" id="guide" role="status" ref={guideRef}>
             ⬆️ 탭/클릭/스페이스/↑ 로 점프<br />
@@ -708,6 +729,7 @@ export default function Home() {
               {rewards.map((reward, index) => (
                 <div
                   key={index}
+                  className={`reward-item ${rewardVisibility[index] === false ? 'fade-out' : ''}`}
                   style={{
                     background: 'rgba(251, 191, 36, 0.9)',
                     color: '#000',
@@ -770,45 +792,55 @@ export default function Home() {
           position: absolute;
           inset: env(safe-area-inset-top, 0) 8px env(safe-area-inset-bottom, 0) 8px;
           display: grid;
-          grid-template-rows: auto 1fr auto;
+          grid-template-rows: auto auto 1fr auto;
+          gap: clamp(4px, 1vw, 8px);
           z-index: 10;
           color: #fff;
           pointer-events: none; /* 게임 입력은 캔버스가 받도록 */
         }
-        .topbar {
+        .top-row {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          gap: 8px;
+          width: 100%;
+          pointer-events: auto;
         }
         .score {
           display: inline-flex;
-          gap: 8px;
+          gap: clamp(6px, 2vw, 12px);
           align-items: center;
-          pointer-events: auto;
           background: rgba(0,0,0,.45);
           border: 1px solid rgba(255,255,255,.25);
-          border-radius: 12px;
-          padding: 6px 10px;
+          border-radius: clamp(8px, 2vw, 12px);
+          padding: clamp(6px, 2vw, 8px) clamp(10px, 3vw, 16px);
           font-weight: 800;
-          font-size: clamp(16px, 3.8vw, 22px); /* 모바일에서 크게 보이도록 */
+          font-size: clamp(14px, 3.5vw, 20px);
           text-shadow: 0 1px 2px rgba(0,0,0,.6);
+          white-space: nowrap;
+          min-width: 150px;
         }
-        .buttons {
-          display: flex; gap: 6px; pointer-events: auto;
+        .control-buttons {
+          display: flex;
+          gap: clamp(2px, 1vw, 4px);
+          pointer-events: auto;
+          justify-content: space-between;
+          width: 100%;
         }
         .btn {
           background: rgba(0,0,0,.45);
           border: 1px solid rgba(255,255,255,.25);
           color: #fff;
-          padding: 6px 10px;
-          border-radius: 10px;
+          padding: clamp(6px, 2vw, 8px) clamp(8px, 2.5vw, 12px);
+          border-radius: clamp(6px, 2vw, 10px);
           font-weight: 700;
+          font-size: clamp(12px, 3vw, 16px);
           user-select: none;
           -webkit-user-select: none;
           touch-action: manipulation;
           pointer-events: auto;
           cursor: pointer;
+          white-space: nowrap;
+          flex: 1;
         }
         .ad-btn {
           background: #f59e0b !important;
@@ -825,6 +857,21 @@ export default function Home() {
           color: #fff;
           min-width: 120px;
           pointer-events: none;
+          transition: opacity 0.8s ease-out;
+        }
+
+        .reward-item {
+          margin-bottom: 8px;
+          padding: 8px;
+          background: rgba(16, 185, 129, 0.2);
+          border: 1px solid rgba(16, 185, 129, 0.4);
+          border-radius: 6px;
+          font-weight: bold;
+          transition: opacity 0.8s ease-out;
+        }
+
+        .reward-item.fade-out {
+          opacity: 0;
         }
         .center-guide {
           align-self: center;
