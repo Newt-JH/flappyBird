@@ -219,13 +219,13 @@ export const useContentArcade = () => {
     }
   };
 
-  const showAd = async () => {
+  const showAd = async (adPlacementName: string = 'RV') => {
     const currentSDK = sdk || (window as any).flappyBirdSDK;
     if (currentSDK && adState === 'idle') {
       try {
         setAdState('requested');
-        const result = await currentSDK.adShow();
-        console.log('📺 광고 요청 결과:', result);
+        const result = await currentSDK.adShow({ placement: adPlacementName });
+        console.log('📺 광고 요청 결과:', result, '지면:', adPlacementName);
         return result.ok;
       } catch (error) {
         console.error('광고 요청 실패:', error);

@@ -227,7 +227,7 @@ export default function Home() {
       const handleAdShow = async () => {
         console.log('📺 게임 오버 모달에서 광고보기 버튼 클릭됨');
         try {
-          const success = await showAd();
+          const success = await showAd('Interstitial'); // 게임 오버 전면 광고
           console.log('광고 요청 결과:', success);
           if (success) {
             console.log('광고 시스템 초기화 성공 - 부모에서 광고 처리 중');
@@ -725,7 +725,7 @@ export default function Home() {
             <button className="btn" id="btn-restart" ref={restartBtnRef}>다시시작</button>
             <button
               className="btn ad-btn"
-              onClick={showAd}
+              onClick={() => showAd('RV')} // 자도 시청 보상형 광고
               disabled={adState !== 'idle'}
               style={{
                 backgroundColor: adState === 'idle' ? '#f59e0b' : '#6b7280',
