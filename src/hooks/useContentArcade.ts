@@ -47,7 +47,7 @@ export const useContentArcade = () => {
         await new Promise((resolve, reject) => {
           const script = document.createElement('script');
           script.type = 'module';
-          script.src = 'https://s.treasurecomics.com/gamearcade/content-arcade-1.0.0.esm.min.js';
+          script.src = 'https://s.treasurecomics.com/gamearcade/test/content-arcade-1.0.0.esm.min.js';
           script.onload = () => {
             // ESM으로 로드된 경우 window.ContentArcade에 할당되는지 확인
             setTimeout(resolve, 100);
@@ -62,7 +62,7 @@ export const useContentArcade = () => {
         // UMD 버전 로드 시도
         await new Promise((resolve, reject) => {
           const script = document.createElement('script');
-          script.src = 'https://s.treasurecomics.com/gamearcade/content-arcade-1.0.0.umd.min.js';
+          script.src = 'https://s.treasurecomics.com/gamearcade/test/content-arcade-1.0.0.umd.min.js';
           script.onload = resolve;
           script.onerror = reject;
           document.head.appendChild(script);
